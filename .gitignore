@@ -1,0 +1,39 @@
+# Local environment configuration (machine-specific paths)
+*.env
+!config/*.env.template
+!config/*.env
+
+# Upstream code + weights — clone/download separately per SETUP.md
+PhageHost/
+PhageHost.tar.gz
+tailseek/
+configs/
+data/
+model_checkpoints/
+TailSeek.py
+*.pt
+*.pth
+*.ckpt
+*.bin
+
+# Large genomic data
+*.faa
+*.fasta
+*.fa
+*.fna
+embeddings/
+
+# Per-dataset prediction outputs that are too big to commit; only the
+# small <5 MB summary CSVs at predictions/ root are committed
+predictions/CHEN/
+predictions/GORODNICHIV/
+predictions/PBIP/
+predictions/PHL/
+predictions/UCSD/
+*.log
+
+# Caches
+__pycache__/
+.DS_Store
+.ipynb_checkpoints/
+*.pyc
