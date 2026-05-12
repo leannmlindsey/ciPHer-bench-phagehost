@@ -1,84 +1,84 @@
 # Setup + reproduce
 
-## 1. Download upstream PhageHost tarball
+## Workflow at a glance
 
-```bash
-# Wherever PHAGEHOST_REPO in your env points (you may need to mkdir its
-# parent first):
-mkdir -p "$(dirname "$PHAGEHOST_REPO")"
-cd       "$(dirname "$PHAGEHOST_REPO")"
-wget https://open.nmdc.cn/specail_data/phage/PhageHost.tar.gz
-tar xzf PhageHost.tar.gz
-# This produces a PhageHost/ directory; rename if your env var
-# expects a different leaf:
-# mv PhageHost "$(basename "$PHAGEHOST_REPO")"
+```text
+1. (on laptop) build data zip      → ciPHer-bench-phagehost-data.zip
+2. (on laptop) rsync zip to Delta
+3. (on Delta) unzip into data/
+4. (on Delta) source phagehost.env, build conda env, run wrappers
 ```
 
-The tarball ships:
-- `TailSeek.py` + `tailseek/` — ESM-1b based tail-fiber detector
-- `model_checkpoints/` — pre-trained weights (HostBuster + TailSeek)
-- `data/` — Wang's training data
-- `PH_inference.ipynb` — the original notebook
-
-## 2. Build the conda env
+## 1. Build the data zip on the laptop
 
 ```bash
+cd /Users/leannmlindsey/Desktop/ciPHer-bench-staging/ciPHer-bench-phagehost
+bash build_data_zip.sh
+# Output: /Users/leannmlindsey/Desktop/ciPHer-bench-data-zips/ciPHer-bench-phagehost-data.zip
+```
+
+Layout mirrors the laptop tree:
+- `data/PhageHost/` — extracted NMDC tarball (TailSeek.py + model_checkpoints)
+- `data/cipher/data/validation_data/...` — cipher's metadata mirror
+- `data/cipher_val_genomes/<DS>/kleborate_out/` — per-dataset Kleborate output
+  **(CHEN/GORODNICHIV/PBIP/UCSD/PhageHostLearn ready; Beamud/Ferriol/Wang missing)**
+- `data/cipher_val_genomes/Wang/PhageHost/predictions/tail_fiber_prediction.csv`
+  — shared TailSeek output for all OOD runs
+
+## 2. Transfer + unzip on Delta
+
+```bash
+ZIP=/Users/leannmlindsey/Desktop/ciPHer-bench-data-zips/ciPHer-bench-phagehost-data.zip
+rsync -avz --info=progress2 "${ZIP}" \
+    llindsey1@dt-login.delta.ncsa.illinois.edu:/projects/bfzj/llindsey1/PHI_TSP/ciPHer-comparisons/phagehost/data/
+
+ssh llindsey1@dt-login.delta.ncsa.illinois.edu
+cd /projects/bfzj/llindsey1/PHI_TSP/ciPHer-comparisons/phagehost
+
+git clone git@github.com:LeAnnMLindsey/ciPHer-bench-phagehost.git .   # first time
+cd data && unzip -q ciPHer-bench-phagehost-data.zip && cd ..
+```
+
+## 3. Build the conda env
+
+```bash
+module load anaconda3 2>/dev/null || true
+eval "$(conda shell.bash hook)"
 conda create -n phagehost python=3.10 -y
 conda activate phagehost
-pip install -r "$PHAGEHOST_REPO/requirements.txt"
-# Plus the deps used by the OOD wrapper:
+pip install -r "${PHAGEHOST_DATA_DIR}/PhageHost/requirements.txt"
 pip install transformers torch lightgbm biopython pandas tqdm scikit-learn
 ```
 
-## 3. Install Kleborate (for K-type calls on cipher OOD hosts)
+## 4. Configure paths + run
 
 ```bash
-brew tap brewsci/bio
-brew install mash minimap2
-pip install kleborate
-kleborate --help
-```
-
-(macOS-specific; on Linux clusters use `conda install -c bioconda mash minimap2 kleborate`.)
-
-## 4. Configure paths
-
-```bash
-cp config/phagehost.env.template phagehost.env   # laptop
-# or:
-cp config/phagehost_delta.env    phagehost.env
-cp config/phagehost_biowulf.env  phagehost.env
-
-pico phagehost.env
+cp config/phagehost_delta.env phagehost.env
 source phagehost.env
 
-echo "PHAGEHOST_REPO=$PHAGEHOST_REPO"
-echo "CIPHER_REPO=$CIPHER_REPO"
-echo "CIPHER_VAL_GENOMES=$CIPHER_VAL_GENOMES"
-ls "$PHAGEHOST_REPO/model_checkpoints/"           # should not be empty
+# Verify:
+ls "${PHAGEHOST_REPO}/model_checkpoints/"   # should not be empty
+
+# OOD on each cipher dataset:
+./scripts/run_ood_by_dataset.sh CHEN
+./scripts/run_ood_by_dataset.sh PBIP
+./scripts/run_ood_by_dataset.sh UCSD
+./scripts/run_ood_by_dataset.sh GORODNICHIV    # tie-saturated (KL23 workaround)
+./scripts/run_ood_by_dataset.sh PHL
 ```
 
-## 5. Run OOD on cipher datasets
+Or in sbatch:
 
 ```bash
+#!/usr/bin/env bash
+#SBATCH --job-name=phagehost_chen
+#SBATCH --gpus-per-node=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x.%j.out
+source $(conda info --base)/etc/profile.d/conda.sh
+conda activate phagehost
 source phagehost.env
-python scripts/run_phagehost_ood.py CHEN
-python scripts/run_phagehost_ood.py PBIP
-python scripts/run_phagehost_ood.py UCSD
-python scripts/run_phagehost_ood.py GORODNICHIV    # KL23 workaround
-python scripts/run_phagehost_ood.py PHL
+./scripts/run_ood_by_dataset.sh CHEN
 ```
-
-Each run writes a prediction matrix CSV under
-`$PHAGEHOST_OUTPUT_ROOT/<dataset>/`.
-
-## 6. (Optional) Wang in-distribution sanity check
-
-```bash
-source phagehost.env
-python scripts/run_phagehost_inference.py
-```
-
-The number this produces should match what's reported in the
-Wang Cell Reports paper. If it doesn't, the env vars or upstream
-checkpoints are wrong.
