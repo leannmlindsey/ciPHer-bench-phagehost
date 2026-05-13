@@ -1,0 +1,30 @@
+# Conda env for PhageHost (Wang et al. 2026) on Delta.
+#
+# Build:
+#   conda env create -f environment.yml
+# Activate:
+#   conda activate phagehost
+#
+# Note: ESM-2 650M is downloaded by transformers on first run.
+# Note: this env does NOT install the upstream PhageHost requirements.txt
+#   automatically. If upstream adds new pinned deps later, add them as
+#   extra `pip:` entries below or `pip install -r $PHAGEHOST_REPO/requirements.txt`
+#   inside the activated env.
+
+name: phagehost
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu124
+      - torch
+      - transformers
+      - lightgbm
+      - biopython
+      - pandas
+      - tqdm
+      - scikit-learn
+      - numpy

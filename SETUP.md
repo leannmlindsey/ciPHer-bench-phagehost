@@ -42,12 +42,16 @@ cd data && unzip -q ciPHer-bench-phagehost-data.zip && cd ..
 ## 3. Build the conda env
 
 ```bash
-module load anaconda3 2>/dev/null || true
-eval "$(conda shell.bash hook)"
-conda create -n phagehost python=3.10 -y
+# Conda must be available; install Miniforge to project space if not:
+#   wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh
+#   bash Miniforge3-Linux-$(uname -m).sh -b -p /projects/bfzj/llindsey1/miniforge3
+#   source /projects/bfzj/llindsey1/miniforge3/etc/profile.d/conda.sh
+
+conda env create -f environment.yml
 conda activate phagehost
-pip install -r "${PHAGEHOST_DATA_DIR}/PhageHost/requirements.txt"
-pip install transformers torch lightgbm biopython pandas tqdm scikit-learn
+
+# If the upstream PhageHost ships extra requirements you need:
+# pip install -r "${PHAGEHOST_REPO}/requirements.txt"
 ```
 
 ## 4. Configure paths + run
